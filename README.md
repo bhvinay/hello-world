@@ -1,2 +1,2 @@
-# hello-world
-1st repository
+Cloud formation template to create Advanced clusters
+
