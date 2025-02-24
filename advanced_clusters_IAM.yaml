@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "IAM setup for Advanced Clusters with extended policies"
+
+Resources:
+  SecureAgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SecureAgentRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com]
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+
+  SecureAgentInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: SecureAgentInstanceProfile
+      Roles:
+        - Ref: SecureAgentRole
+
+  SecureAgentPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: SecureAgentPolicy
+      Roles:
+        - Ref: SecureAgentRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:PutObject
+            Resource: "arn:aws:s3:::my-secure-bucket/*"
+          - Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:StartInstances
+              - ec2:StopInstances
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+              - secretsmanager:ListSecrets
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:PutParameter
+              - ssm:DeleteParameter
+            Resource: "*"
+
+  MasterNodePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: MasterNodePolicy
+      Roles:
+        - Ref: MasterNodeRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeRegions
+              - ec2:DescribeRouteTables
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeVolumes
+              - ec2:DescribeVpcs
+              - ec2:ModifyInstanceAttribute
+              - ec2:CreateTags
+              - ec2:AttachVolume
+              - ec2:DetachVolume
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - s3:GetBucketLocation
+              - s3:GetEncryptionConfiguration
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:PutObject
+              - s3:GetObjectAcl
+              - s3:DeleteObject
+              - s3:PutObjectAcl
+            Resource: "arn:aws:s3:::cluster-master-data/*"
+          - Effect: Allow
+            Action:
+              - autoscaling:DescribeAutoScalingInstances
+              - autoscaling:DescribeTags
+              - autoscaling:DescribeAutoScalingGroups
+              - autoscaling:DescribeLaunchConfigurations
+              - autoscaling:DescribeScalingActivities
+              - autoscaling:SetDesiredCapacity
+              - autoscaling:TerminateInstanceInAutoScalingGroup
+              - autoscaling:UpdateAutoScalingGroup
+              - autoscaling:AttachLoadBalancers
+              - autoscaling:CreateAutoScalingGroup
+              - autoscaling:DeleteAutoScalingGroup
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+              - elasticloadbalancing:DeregisterInstancesFromLoadBalancer
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+              - elasticloadbalancing:CreateLoadBalancerListeners
+              - elasticloadbalancing:DescribeInstanceHealth
+              - elasticloadbalancing:ModifyListener
+              - elasticloadbalancing:CreateLoadBalancer
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:ConfigureHealthCheck
+              - elasticloadbalancing:AddTags
+            Resource: "*"
+
+  WorkerNodePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: WorkerNodePolicy
+      Roles:
+        - Ref: WorkerNodeRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeRegions
+              - ec2:CreateTags
+              - ec2:DescribeVolumes
+              - ec2:ModifyVolume
+              - ec2:DescribeVolumesModifications
+              - ec2:DescribeSubnets
+              - ec2:DescribeInstanceStatus
+              - ec2:DescribeTags
+              - s3:GetObject
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:DeleteObject
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - autoscaling:DescribeAutoScalingGroups
+              - autoscaling:DescribeScalingActivities
+              - autoscaling:AttachInstances
+              - autoscaling:DetachInstances
+            Resource: "*"
+
+Outputs:
+  SecureAgentRoleArn:
+    Description: "ARN of the SecureAgent IAM Role"
+    Value: !GetAtt SecureAgentRole.Arn
+
+  SecureAgentInstanceProfile:
+    Description: "Instance Profile for SecureAgent EC2 instances"
+    Value: !Ref SecureAgentInstanceProfile
+
+  MasterNodeRoleArn:
+    Description: "ARN of the MasterNode IAM Role"
+    Value: !GetAtt MasterNodeRole.Arn
+
+  WorkerNodeRoleArn:
+    Description: "ARN of the WorkerNode IAM Role"
+    Value: !GetAtt WorkerNodeRole.Arn
+    Export:
+      Name: AdvancedClusters-WorkerNodeRole
+
+  MasterNodePolicyArn:
+    Description: "ARN of the MasterNode IAM Policy"
+    Value: !Ref MasterNodePolicy
+
+  WorkerNodePolicyArn:
+    Description: "ARN of the WorkerNode IAM Policy"
+    Value: !Ref WorkerNodePolicy

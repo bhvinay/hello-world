@@ -1,0 +1,121 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Compute setup for Advanced Clusters in AWS"
+
+Resources:
+  # Master Node Instance
+  MasterNode:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.large
+      ImageId: "ami-0abcdef1234567890" # Replace with the correct AMI ID
+      IamInstanceProfile: !Ref MasterInstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          SubnetId: !Ref PublicSubnet
+          GroupSet:
+            - !Ref MasterNodeSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp2
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: "MasterNode"
+
+  # Worker Node Auto Scaling Group
+  WorkerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WorkerLaunchTemplate
+        Version: !GetAtt WorkerLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 10
+      DesiredCapacity: 2
+      Tags:
+        - Key: Name
+          Value: "WorkerNode"
+          PropagateAtLaunch: true
+      ServiceLinkedRoleARN: !Ref WorkerInstanceProfile
+
+  WorkerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceType: t3.medium
+        ImageId: "ami-0abcdef1234567890" # Replace with correct AMI ID
+        IamInstanceProfile:
+          Name: !Ref WorkerInstanceProfile
+        SecurityGroupIds:
+          - !Ref WorkerNodeSecurityGroup
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: false
+            DeleteOnTermination: true
+            SubnetId: !Ref PrivateSubnet
+      TagSpecifications:
+        - ResourceType: instance
+          Tags:
+            - Key: Name
+              Value: "WorkerNode"
+
+  # Load Balancer
+  ClusterLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "AdvancedClusterLB"
+      Subnets:
+        - !Ref PublicSubnet
+      SecurityGroups:
+        - !Ref ELBSecurityGroup
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: "deletion_protection.enabled"
+          Value: "false"
+      Tags:
+        - Key: Name
+          Value: "AdvancedClusterLB"
+
+  LoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref ClusterVPC
+      Port: 443
+      Protocol: HTTPS
+      TargetType: instance
+      HealthCheckProtocol: HTTPS
+      HealthCheckPort: "443"
+      HealthCheckPath: "/"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Tags:
+        - Key: Name
+          Value: "AdvancedClusterTG"
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ClusterLoadBalancer
+      Protocol: HTTPS
+      Port: 443
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref LoadBalancerTargetGroup
+
+Outputs:
+  MasterNodeId:
+    Description: "Master Node Instance ID"
+    Value: !Ref MasterNode
+
+  WorkerAutoScalingGroupName:
+    Description: "Worker Auto Scaling Group Name"
+    Value: !Ref WorkerAutoScalingGroup
+
+  LoadBalancerDNS:
+    Description: "Load Balancer DNS Name"
+    Value: !GetAtt ClusterLoadBalancer.DNSName
